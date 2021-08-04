@@ -9,6 +9,37 @@ roslaunch semfire_dataset_ntu run_dataset.launch
 
 `[ERROR] [1627814098.645725029]: PluginlibFactory: The plugin for class 'rviz_plugin_tutorials/Imu' failed to load.`
 
+# Bag info
+
+```
+path:        2019_11_15_raw_data.bag
+version:     2.0
+duration:    13:48s (828s)
+start:       Nov 15 2019 11:43:19.54 (1573807399.54)
+end:         Nov 15 2019 11:57:08.34 (1573808228.34)
+size:        18.8 GB
+messages:    2932288
+compression: none [23848/23848 chunks]
+types:       geometry_msgs/TwistStamped        [98d34b0043a2093cf9d9345ab6eef12e]
+             lslidar_c16_msgs/LslidarC16Packet [ae4f90a23256f44e82baa08dd45c3456]
+             sensor_msgs/CameraInfo            [c9a58c1b0b154e0e6da7578cb991d214]
+             sensor_msgs/CompressedImage       [8f7a12909da2c9d3332d540a0977563f]
+             sensor_msgs/Image                 [060021388200f6f0f447d0fcd9c64743]
+             sensor_msgs/Imu                   [6a62c6daae103f4ff57a132d6f95cec2]
+             sensor_msgs/NavSatFix             [2d3a8cd499b9b4a0249fb98fd05cfa48]
+             sensor_msgs/TimeReference         [fded64a0265108ba86c3d38fb11c0c16]
+topics:      /back_lslidar_packet                          1385995 msgs    : lslidar_c16_msgs/LslidarC16Packet
+             /dalsa_camera_720p/compressed                    8270 msgs    : sensor_msgs/CompressedImage      
+             /front_lslidar_packet                         1385998 msgs    : lslidar_c16_msgs/LslidarC16Packet
+             /gps_fix                                          829 msgs    : sensor_msgs/NavSatFix            
+             /gps_time                                         829 msgs    : sensor_msgs/TimeReference        
+             /gps_vel                                          829 msgs    : geometry_msgs/TwistStamped       
+             /imu/data                                       76009 msgs    : sensor_msgs/Imu                  
+             /realsense/aligned_depth_to_color/image_raw     23839 msgs    : sensor_msgs/Image                
+             /realsense/color/camera_info                    24845 msgs    : sensor_msgs/CameraInfo           
+             /realsense/color/image_raw/compressed           24845 msgs    : sensor_msgs/CompressedImage
+```
+
 # Topics
 
 ```
