@@ -51,10 +51,11 @@ def callback(data):
     trans_message.transform.rotation.w = 1
     """
     br = TransformBroadcaster()
-    quat = km.robot_filter.x[6:]/np.linalg.norm(km.robot_filter.x[6:])
+    quat = quaternion_from_euler(*km.robot_filter.x[6:])
+    quat = quat/np.linalg.norm(quat)
     no_rot = (0, 0, 0, 1)
 #(km.robot_filter.x[6], km.robot_filter.x[7], km.robot_filter.x[8], km.robot_filter.x[9])
-    br.sendTransform(km.robot_filter.x[0:3], no_rot, data.header.stamp, "bobcat_base", "World")
+    br.sendTransform(km.robot_filter.x[0:3], quat, data.header.stamp, "bobcat_base", "World")
 """
 def move(states):
     #pub = rospy.Publisher('/move_base_simple/goal', PoseStamped, queue_size=10)
