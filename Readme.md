@@ -109,9 +109,9 @@ In our problem we want to track the position and pose of the robot. The matrix w
 `X = [x, y, z, ddx, ddy, ddz, R, P, Y]`. where the first three elements represent the position 
 and `ddx, ddy, ddz` represent the acceleration. We added the linear acceleration to the states to make use
 of the acceleration provided by the IMU sensor. The last three `R, P, Y` represent the orientation of 
-the robot in euler angles. 
+the robot in euler angles.
 
-#### State transition matrix F
+##### State transition matrix F
 
 It will be a 9x9 matrix which is multiplied by the states to compute the prior.
 
@@ -131,7 +131,7 @@ F =
 Where `dt` is the time step which is substituted by 0.2 after checking the different between two consecutive
 time stamps of the IMU messages.
 
-#### The state variance matrix
+##### The state variance matrix P
 
 ```
 P = 
@@ -150,7 +150,7 @@ This matrix represent the uncertainty we have in our state. We assumed that our 
 so all the elements of the diagonal are set to zero. The higher the values the more uncertainty
 we have in the states. We specify an initial value for P and the Kalman filter updates it goes.
 
-#### The measurement noise covariance R
+##### The measurement noise covariance R
 
 For the Imu sensor we have the covariance matrix provided for the linear acceleration and the orientation
 
@@ -164,28 +164,72 @@ R =
 [0, 0, 0, 0, 0, 0.007615422629706791]]
 ```
 
-#### The process noise Q
+##### The process noise Q
 
-This matrix is represent the process noise and one on its function to keep the process vairance `P` from 
+This matrix is represent the process noise and one on its function to keep the process vairance `P` from
 going to zero. We assumed it to be zero for simplicity.
 
-### Code Implementation 
+### Code Implementation
 
-The kalman filter is implemented in `kal.py`
+The kalman filter is implemented in `kal.py` and the ros node in `listener.py`
 
-A ros node do to main functions subscribe to the `/imu/data` topic to get the sensor's reading
+The ros node do two main functions subscribe to the `/imu/data` topic to get the sensor's reading
 do a kalman filter iteration to get the new states then publish a transform between the `world` frame
 and the robot base frame which contain the new position of the robot.
 
-### Code explanation 
+### Code explanation
 
-In the callback of the /imu/topic
+For the Kalman filter it is pretty straight forward
+
+``` python
+self.robot_filter = KalmanFilter(dim_x=9, dim_z=6)    # Filter object
+```
+
+We create a KalmanFilter object and then start to assign our matrices to it as follows:
+
+```python
+def create_filter(self):
+      self.robot_filter.x = self.x
+      self.robot_filter.F = np.identity(9)
+      self.robot_filter.F[0,3] = 0.5 * self.dt**2
+      self.robot_filter.F[1,4] = 0.5 * self.dt**2
+      self.robot_filter.F[2,5] = 0.5 * self.dt**2
+      
+      self.robot_filter.H[:] = self.h
+      self.robot_filter.R[:]= self.R
+      self.robot_filter.P[:] = self.p
+      self.robot_filter.Q[:]= self.q
+```
+
+**Note:** I decided to make it in a class structure so when imported in the ros node no variable name
+conflict take place
+
+For the ros node `listener.py`
+
+```python
+# Create the kalman filter
+km = kalman_matrix()
+km.create_filter()
+```
+
+We created an instance of our class, and called the `create_filter()` to assign the matrices
+
+``` python
+if __name__ == '__main__':
+    
+    rospy.init_node('listener', anonymous=True)
+    rospy.Subscriber("/imu/data", Imu, Imu_callback)
+    rospy.spin()
+```
+
+Jumping to the main, We initialized the node, created a subscriber, used the `rospy.spin()` to keep the
+node up and handle callbacks
+
+In the callback of the `/imu/data` topic `Imu_callback`
 
 ```python
 orientation_q = [data.orientation.x, data.orientation.y, data.orientation.y, data.orientation.w]
-print("orientation_q", orientation_q)
 euler_angles = euler_from_quaternion(orientation_q)
-print("euler angles", euler_angles)
 reading = np.array([data.linear_acceleration.x, data.linear_acceleration.y, data.linear_acceleration.z,
                 euler_angles[0], euler_angles[1], euler_angles[2]])
 ```
@@ -193,7 +237,7 @@ reading = np.array([data.linear_acceleration.x, data.linear_acceleration.y, data
 We convert the readings from quaternion to euler and then we have the `reading` array which repesent
 the measurement matrix in our kalman filter
 
-```
+```python
 km.robot_filter.predict()
 km.robot_filter.update(reading)
 ```
@@ -201,7 +245,7 @@ km.robot_filter.update(reading)
 then we do the `predict` which calculate the prior, followed by the `update` which take the measurement
 to compute the new states. Note: these methods update the states internally.
 
-```
+```python
 br = TransformBroadcaster()
 
 quat = quaternion_from_euler(*km.robot_filter.x[6:])
@@ -209,7 +253,9 @@ quat = quat/np.linalg.norm(quat)
 br.sendTransform(km.robot_filter.x[0:3], quat, data.header.stamp, "bobcat_base", "World")
 ```
 
-We created a transform broadcaster object which will send a transformation between a fixed `world` frame
+We created a transform broadcaster object which will send a transformation between a fixed `World` frame
 and our robot base frame. The `sendTransform` fuction gets the rotation in quaternion so that's why
 we converted the angles from euler to quaternion.
 the send transform takes the translation, orientation, time stamp, the child frame and the parent frame.
+
+In rviz you can change the Fixed frame to World to see the robot moving with respect to this frame
