@@ -1,15 +1,36 @@
 # Pose estimation
 
-# Execute
+The goal to generate a 6D pose estimate for the robot.
 
+## My approach to solution
+
+### Environment setup
+
+I followed the steps in this [link](https://semfire-core.slite.com/p/note/JfJtfmdjUWv2XBJTTA1yKH) to setup the environment and required packages.
+
+**Note:** I had the following error:
+
+```
+[ERROR] [1627814098.645725029]: PluginlibFactory: The plugin for class 'rviz_plugin_tutorials/Imu' failed to load.
+```
+
+I solved it by installing the following package:
+
+```bash
+sudo apt install ros-noetic-rviz-plugin-tutorials
+```
+
+Then I run ros bag using the following command:
+
+```
 roslaunch semfire_dataset_ntu run_dataset.launch
+```
 
+### Check the rosbag
 
-# Errors
-
-`[ERROR] [1627814098.645725029]: PluginlibFactory: The plugin for class 'rviz_plugin_tutorials/Imu' failed to load.`
-
-# Bag info
+```
+rosbag info 2019_11_15_raw_data.bag
+```
 
 ```
 path:        2019_11_15_raw_data.bag
@@ -28,7 +49,8 @@ types:       geometry_msgs/TwistStamped        [98d34b0043a2093cf9d9345ab6eef12e
              sensor_msgs/Imu                   [6a62c6daae103f4ff57a132d6f95cec2]
              sensor_msgs/NavSatFix             [2d3a8cd499b9b4a0249fb98fd05cfa48]
              sensor_msgs/TimeReference         [fded64a0265108ba86c3d38fb11c0c16]
-topics:      /back_lslidar_packet                          1385995 msgs    : lslidar_c16_msgs/LslidarC16Packet
+topics:      /back_lslidar_packet                          1385995 msgs    : lslidar_c16_msgs 
+LslidarC16Packet
              /dalsa_camera_720p/compressed                    8270 msgs    : sensor_msgs/CompressedImage      
              /front_lslidar_packet                         1385998 msgs    : lslidar_c16_msgs/LslidarC16Packet
              /gps_fix                                          829 msgs    : sensor_msgs/NavSatFix            
@@ -40,64 +62,10 @@ topics:      /back_lslidar_packet                          1385995 msgs    : lsl
              /realsense/color/image_raw/compressed           24845 msgs    : sensor_msgs/CompressedImage
 ```
 
-# Topics
+After checking the available sensors and the data they provide, I decided to do kalman filter to build to estimate
+the position and pose of the robot. I used the data provided by the Imu sensor.
 
-```
-back_lslidar_layer_num
-/back_lslidar_packet
-/back_lslidar_point_cloud
-/back_lslidar_point_cloud_filtered
-/back_lslidar_scan
-/back_lslidar_scan_channel
-/back_lslidar_sweep
-/clicked_point
-/clock
-/crop_box/parameter_descriptions
-/crop_box/parameter_updates
-/dalsa_camera_720p/compressed
-/front_lslidar_layer_num
-/front_lslidar_packet
-/front_lslidar_point_cloud
-/front_lslidar_scan
-/front_lslidar_scan_channel
-/front_lslidar_sweep
-/gps_fix
-/gps_time
-/gps_vel
-/imu/data
-/initialpose
-/joint_states
-/move_base_simple/goal
-/pcl_manager/bond
-/realsense/aligned_depth_to_color/image_raw
-/realsense/color/camera_info
-/realsense/color/image_raw
-/realsense/color/image_raw/compressed
-/realsense/depth/color/points
-/repub_image_rect_color/compressed/parameter_descriptions
-/repub_image_rect_color/compressed/parameter_updates
-/rosout
-/rosout_agg
-/rviz/compressed/parameter_descriptions
-/rviz/compressed/parameter_updates
-/tf
-/tf_static
-```
-
-## Topics of interest
-
-/initial_pose: Type: geometry_msgs/PoseWithCovarianceStamped
-/back_lslidar_point_cloud_filtered Type: sensor_msgs/PointCloud2
-/realsense/depth/color/points sensor_msgs/PointCloud2
-/front_lslidar_scan sensor_msgs/LaserScan
-/realsense/color/image_raw sensor_msgs/Image
-/move_base_simple/goal geometry_msgs/PoseStamped
-/imu/data sensor_msgs/Imu
-/joint_states sensor_msgs/JointState
-/gps_fix sensor_msgs/NavSatFix
-/gps_vel geometry_msgs/TwistStamped
-
-### Imu /imu/data
+#### Imu /imu/data
 
 ```
 std_msgs/Header header
@@ -122,64 +90,126 @@ geometry_msgs/Vector3 linear_acceleration
 float64[9] linear_acceleration_covariance
 ```
 
-### GPS
+### Kalman Filter
+
+I decided to use the kalman filter library [FilterPy](https://filterpy.readthedocs.io/en/latest/#).
+This library was written in conjunction with the book [Kalman and Bayesian Filters in Python](https://github.com/rlabbe/Kalman-and-Bayesian-Filters-in-Python)
+
+We need to define the matrices required for Kalman filter and the library handle the computation in two
+methods `predict` and `update` which do the equation multiplication and give the new state.
+
+#### Matrices design
+
+Starting with the main equation `X = Fx + Bu`
+The first matrix is the state matrix, which define the states we want to track.
+In our problem we want to track the position and pose of the robot. The matrix will look like this
+
+##### State matrix X
+
+`X = [x, y, z, ddx, ddy, ddz, R, P, Y]`. where the first three elements represent the position 
+and `ddx, ddy, ddz` represent the acceleration. We added the linear acceleration to the states to make use
+of the acceleration provided by the IMU sensor. The last three `R, P, Y` represent the orientation of 
+the robot in euler angles. 
+
+#### State transition matrix F
+
+It will be a 9x9 matrix which is multiplied by the states to compute the prior.
 
 ```
-uint8 COVARIANCE_TYPE_UNKNOWN=0
-uint8 COVARIANCE_TYPE_APPROXIMATED=1
-uint8 COVARIANCE_TYPE_DIAGONAL_KNOWN=2
-uint8 COVARIANCE_TYPE_KNOWN=3
-std_msgs/Header header
-  uint32 seq
-  time stamp
-  string frame_id
-sensor_msgs/NavSatStatus status
-  int8 STATUS_NO_FIX=-1
-  int8 STATUS_FIX=0
-  int8 STATUS_SBAS_FIX=1
-  int8 STATUS_GBAS_FIX=2
-  uint16 SERVICE_GPS=1
-  uint16 SERVICE_GLONASS=2
-  uint16 SERVICE_COMPASS=4
-  uint16 SERVICE_GALILEO=8
-  int8 status
-  uint16 service
-float64 latitude
-float64 longitude
-float64 altitude
-float64[9] position_covariance
-uint8 position_covariance_type
+F = 
+[[1.   0.   0.   (0.5 * self.dt**2) 0.   0.   0.   0.   0.  ]
+ [0.   1.   0.   0.   (0.5 * self.dt**2) 0.   0.   0.   0.  ]
+ [0.   0.   1.   0.   0.   (0.5 * self.dt**2) 0.   0.   0.  ]
+ [0.   0.   0.   1.   0.   0.   0.   0.   0.  ]
+ [0.   0.   0.   0.   1.   0.   0.   0.   0.  ]
+ [0.   0.   0.   0.   0.   1.   0.   0.   0.  ]
+ [0.   0.   0.   0.   0.   0.   1.   0.   0.  ]
+ [0.   0.   0.   0.   0.   0.   0.   1.   0.  ]
+ [0.   0.   0.   0.   0.   0.   0.   0.   1.  ]]
 ```
 
-### Joint states
+Where `dt` is the time step which is substituted by 0.2 after checking the different between two consecutive
+time stamps of the IMU messages.
+
+#### The state variance matrix
 
 ```
-std_msgs/Header header
-  uint32 seq
-  time stamp
-  string frame_id
-string[] name
-float64[] position
-float64[] velocity
-float64[] effort
+P = 
+[[ 50.   0.   0.   0.   0.   0.   0.   0.   0.]
+ [  0.  50.   0.   0.   0.   0.   0.   0.   0.]
+ [  0.   0.  50.   0.   0.   0.   0.   0.   0.]
+ [  0.   0.   0. 100.   0.   0.   0.   0.   0.]
+ [  0.   0.   0.   0. 100.   0.   0.   0.   0.]
+ [  0.   0.   0.   0.   0. 100.   0.   0.   0.]
+ [  0.   0.   0.   0.   0.   0.   5.   0.   0.]
+ [  0.   0.   0.   0.   0.   0.   0.   5.   0.]
+ [  0.   0.   0.   0.   0.   0.   0.   0.   5.]]
 ```
 
-# PoseStamped
-std_msgs/Header header
-  uint32 seq
-  time stamp
-  string frame_id
-geometry_msgs/Pose pose
-  geometry_msgs/Point position
-    float64 x
-    float64 y
-    float64 z
-  geometry_msgs/Quaternion orientation
-    float64 x
-    float64 y
-    float64 z
-    float64 w
+This matrix represent the uncertainty we have in our state. We assumed that our states are not correlated
+so all the elements of the diagonal are set to zero. The higher the values the more uncertainty
+we have in the states. We specify an initial value for P and the Kalman filter updates it goes.
 
-# Todo 
+#### The measurement noise covariance R
 
-* Draw graph showing the trajectory and the change in the process noise
+For the Imu sensor we have the covariance matrix provided for the linear acceleration and the orientation
+
+```
+R = 
+[[0.0015387262937311438, 0, 0, 0, 0, 0],
+[0, 0.0015387262937311438, 0, 0, 0, 0],
+[0, 0, 0.0015387262937311438, 0, 0, 0],
+[0, 0, 0, 0.002741552146694444, 0, 0],
+[0, 0, 0, 0, 0.002741552146694444, 0],
+[0, 0, 0, 0, 0, 0.007615422629706791]]
+```
+
+#### The process noise Q
+
+This matrix is represent the process noise and one on its function to keep the process vairance `P` from 
+going to zero. We assumed it to be zero for simplicity.
+
+### Code Implementation 
+
+The kalman filter is implemented in `kal.py`
+
+A ros node do to main functions subscribe to the `/imu/data` topic to get the sensor's reading
+do a kalman filter iteration to get the new states then publish a transform between the `world` frame
+and the robot base frame which contain the new position of the robot.
+
+### Code explanation 
+
+In the callback of the /imu/topic
+
+```python
+orientation_q = [data.orientation.x, data.orientation.y, data.orientation.y, data.orientation.w]
+print("orientation_q", orientation_q)
+euler_angles = euler_from_quaternion(orientation_q)
+print("euler angles", euler_angles)
+reading = np.array([data.linear_acceleration.x, data.linear_acceleration.y, data.linear_acceleration.z,
+                euler_angles[0], euler_angles[1], euler_angles[2]])
+```
+
+We convert the readings from quaternion to euler and then we have the `reading` array which repesent
+the measurement matrix in our kalman filter
+
+```
+km.robot_filter.predict()
+km.robot_filter.update(reading)
+```
+
+then we do the `predict` which calculate the prior, followed by the `update` which take the measurement
+to compute the new states. Note: these methods update the states internally.
+
+```
+br = TransformBroadcaster()
+
+quat = quaternion_from_euler(*km.robot_filter.x[6:])
+quat = quat/np.linalg.norm(quat)
+br.sendTransform(km.robot_filter.x[0:3], quat, data.header.stamp, "bobcat_base", "World")
+```
+
+We created a transform broadcaster object which will send a transformation between a fixed `world` frame
+and our robot base frame. The `sendTransform` fuction gets the rotation in quaternion so that's why
+we converted the angles from euler to quaternion.
+the send transform takes the translation, orientation, time stamp, the child frame and the parent frame.
