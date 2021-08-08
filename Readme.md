@@ -228,7 +228,7 @@ node up and handle callbacks
 In the callback of the `/imu/data` topic `Imu_callback`
 
 ```python
-orientation_q = [data.orientation.x, data.orientation.y, data.orientation.y, data.orientation.w]
+orientation_q = [data.orientation.x, data.orientation.y, data.orientation.z, data.orientation.w]
 euler_angles = euler_from_quaternion(orientation_q)
 reading = np.array([data.linear_acceleration.x, data.linear_acceleration.y, data.linear_acceleration.z,
                 euler_angles[0], euler_angles[1], euler_angles[2]])

@@ -23,7 +23,7 @@ def Imu_callback(data):
     2. perform update
     """
     # Get the measurements
-    orientation_q = [data.orientation.x, data.orientation.y, data.orientation.y, data.orientation.w]
+    orientation_q = [data.orientation.x, data.orientation.y, data.orientation.z, data.orientation.w]
     # Change them to euler angles
     euler_angles = euler_from_quaternion(orientation_q)
     # measurement which contain the linear acceleration followed by orientation
